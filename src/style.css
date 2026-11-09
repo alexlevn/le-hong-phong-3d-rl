@@ -1,0 +1,9 @@
+html, body, #app { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #cfdce6; }
+canvas { display: block; touch-action: none; outline: none; }
+#loading { position: fixed; inset: 0; display: grid; place-items: center; font: 500 18px/1.4 system-ui, sans-serif; color: #3a4048; background: #e9e2d0; text-align: center; padding: 24px; }
+#hud { position: fixed; left: 16px; right: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 500 14px/1.3 system-ui, sans-serif; pointer-events: none; }
+#places { display: flex; flex-wrap: wrap; gap: 8px; pointer-events: auto; }
+#hud button, #hud label { pointer-events: auto; background: rgba(250, 245, 232, .92); color: #3c3226; border: 1px solid rgba(90, 70, 40, .25); border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
+#hud button:hover { background: #fff; }
+#hud label { display: inline-flex; gap: 6px; align-items: center; }
+#help { position: fixed; top: 16px; left: 16px; max-width: min(420px, calc(100vw - 32px)); padding: 8px 12px; border-radius: 8px; background: rgba(30, 30, 30, .55); color: #fff; font: 13px/1.45 system-ui, sans-serif; pointer-events: none; }

@@ -1,0 +1,19 @@
+{
+  "name": "le-hong-phong-3d",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}
