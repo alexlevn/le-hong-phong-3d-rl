@@ -10,6 +10,7 @@ const WALK = 3.6;
 const RUN = 7;
 /** Click walks shorter than this walk; longer ones run. */
 const RUN_FROM = 6;
+const ACCEL = 6;
 /** Look-at point above the feet (the character's chest). */
 const FOCUS_HEIGHT = 1.35;
 const MIN_PITCH = -0.15;
@@ -61,6 +62,7 @@ export class Player {
   private path: Point[] = [];
   private goal: Point | null = null;
   private stuck = 0;
+  private pace = 0;
   private replanned = false;
   private readonly finder: Pathfinder;
   private readonly marker: ClickMarker;
@@ -209,9 +211,12 @@ export class Player {
       }
     }
 
+    // Accelerate / slow down over a few tenths of a second instead of jumping to full speed.
+    this.pace = want > 0 ? MathUtils.damp(this.pace, want, ACCEL, dt) : 0;
     let speed = 0;
     if (want > 0) {
-      const p = pushOut(this.x + mx * want * dt, this.z + mz * want * dt, this.blockers, RADIUS);
+      const step = Math.min(this.pace, want);
+      const p = pushOut(this.x + mx * step * dt, this.z + mz * step * dt, this.blockers, RADIUS);
       // Real speed after sliding along walls, so feet do not run on the spot against a wall.
       speed = Math.hypot(p.x - this.x, p.z - this.z) / Math.max(dt, 1e-4);
       this.x = p.x;
@@ -219,7 +224,7 @@ export class Player {
       this.heading = dampAngle(this.heading, Math.atan2(mx, mz), 12, dt);
       if (this.path.length > 0) {
         // Pushed back by something the grid missed: plan again once, then give up rather than run in place.
-        this.stuck = speed < want * 0.2 ? this.stuck + dt : 0;
+        this.stuck = speed < step * 0.2 ? this.stuck + dt : 0;
         if (this.stuck > 0.6) {
           if (this.replanned) this.cancelWalk();
           else {
