@@ -16,9 +16,10 @@ function plane(kit: Kit, key: MatKey, x0: number, x1: number, z0: number, z1: nu
 }
 
 function buildMainWings(kit: Kit): void {
-  buildWing(kit, { frame: frame(EAST_X1, -COURT_Z, Math.PI), length: 62.2, width: 8.7, gallery: 3.2, storeys: 2, storeyH: 4.3, bays: 17, openBays: [8] });
-  buildWing(kit, { frame: frame(COURT_X0, COURT_Z, 0), length: 62.2, width: 8.7, gallery: 3.2, storeys: 2, storeyH: 4.3, bays: 17, openBays: [8] });
-  buildWing(kit, { frame: frame(COURT_X0, -38.3, -Math.PI / 2), length: 76.6, width: 17.7, gallery: 3.4, storeys: 2, storeyH: 4.3, bays: 21, openBays: [10] });
+  // passBays join the corridors: north/south bays in front of the clock hall's open ends, west bays where the north/south galleries run in.
+  buildWing(kit, { frame: frame(EAST_X1, -COURT_Z, Math.PI), length: 62.2, width: 8.7, gallery: 3.2, storeys: 2, storeyH: 4.3, bays: 17, openBays: [8], passBays: [0, 1] });
+  buildWing(kit, { frame: frame(COURT_X0, COURT_Z, 0), length: 62.2, width: 8.7, gallery: 3.2, storeys: 2, storeyH: 4.3, bays: 17, openBays: [8], passBays: [15, 16] });
+  buildWing(kit, { frame: frame(COURT_X0, -38.3, -Math.PI / 2), length: 76.6, width: 17.7, gallery: 3.4, storeys: 2, storeyH: 4.3, bays: 21, openBays: [10], passBays: [3, 17] });
   buildWing(kit, { frame: frame(EAST_X0, COURT_Z, Math.PI / 2), length: COURT_Z * 2, width: EAST_X1 - EAST_X0, gallery: 3, storeys: 1, storeyH: 5, bays: 13, openBays: [6], twoFaced: true });
   buildWing(kit, { frame: frame(40, -27, Math.PI), length: 7.5, width: 8, gallery: 2.6, storeys: 1, storeyH: 4.6, bays: 2 });
   buildWing(kit, { frame: frame(EAST_X1, 27, 0), length: 7.5, width: 8, gallery: 2.6, storeys: 1, storeyH: 4.6, bays: 2 });
@@ -141,14 +142,17 @@ function buildGardens(kit: Kit): void {
   }
 }
 
-function bench(kit: Kit, m: Matrix4, y: number): void {
+/** Slatted bench facing local -z; footprint blocks walking. */
+function bench(kit: Kit, x: number, z: number, rot: number, y: number): void {
+  const m = frame(x, z, rot);
   for (const dz of [-0.2, -0.08, 0.04, 0.16]) kit.box("wood", -0.85, 0.85, y + 0.43, y + 0.47, dz - 0.05, dz + 0.05, m, 1.5);
   for (const dz of [0.27, 0.4]) kit.box("wood", -0.85, 0.85, y + 0.62 + (dz - 0.27), y + 0.72 + (dz - 0.27), dz + 0.02, dz + 0.05, m, 1.5);
-  for (const x of [-0.75, 0.75]) {
-    kit.box("iron", x - 0.03, x + 0.03, y, y + 0.46, -0.28, -0.22, m);
-    kit.box("iron", x - 0.03, x + 0.03, y, y + 0.92, 0.3, 0.36, m);
-    kit.box("iron", x - 0.03, x + 0.03, y + 0.4, y + 0.46, -0.28, 0.33, m);
+  for (const bx of [-0.75, 0.75]) {
+    kit.box("iron", bx - 0.03, bx + 0.03, y, y + 0.46, -0.28, -0.22, m);
+    kit.box("iron", bx - 0.03, bx + 0.03, y, y + 0.92, 0.3, 0.36, m);
+    kit.box("iron", bx - 0.03, bx + 0.03, y + 0.4, y + 0.46, -0.28, 0.33, m);
   }
+  kit.block(-0.85, 0.85, -0.28, 0.36, m);
 }
 
 function buildCourt(kit: Kit): void {
@@ -169,14 +173,20 @@ function buildCourt(kit: Kit): void {
   kit.block(18.35, 20.65, -1.15, 1.15);
   kit.add("bronze", new CylinderGeometry(0.26, 0.34, 0.55, 12).translate(19.5, 1.68, 0));
   kit.add("bronze", new SphereGeometry(0.17, 14, 10).translate(19.5, 2.1, 0));
-  for (const z of [-19, -11, -3.8, 3.8, 11, 19]) bench(kit, frame(24.6, z, -Math.PI / 2), PLINTH);
-  for (let i = 0; i < 6; i++) {
-    bench(kit, frame(-20 + i * 8, -25.4, 0), PLINTH);
-    bench(kit, frame(-20 + i * 8, 25.4, Math.PI), PLINTH);
+  // Clock hall: one bench behind the balustrade of every other bay, skipping the central passage.
+  const hallBay = (COURT_Z * 2) / 13;
+  for (const i of [1, 3, 5]) for (const s of [-1, 1]) bench(kit, 24.6, s * (COURT_Z - (i + 0.5) * hallBay), -Math.PI / 2, PLINTH);
+  // North/south galleries: against the room wall behind a pier, between two classroom doors (one door per bay).
+  const wingBay = 62.2 / 17;
+  for (const i of [3, 5, 7, 10, 12, 14]) {
+    const x = COURT_X0 + i * wingBay;
+    bench(kit, x, 25.4, 0, PLINTH);
+    bench(kit, x, -25.4, Math.PI, PLINTH);
   }
-  for (const [x, z] of [[-8, 16], [8, -16], [10, 12], [-14, -10]] as const) {
-    bench(kit, frame(x, z, 0.4), 0.05);
-    kit.block(x - 0.9, x + 0.9, z - 0.35, z + 0.35);
+  // Court: in the outer tree rows, halfway between trees, facing the central walk.
+  for (const x of [-15, 0.5]) {
+    bench(kit, x, 15.5, 0, 0.05);
+    bench(kit, x, -15.5, Math.PI, 0.05);
   }
 }
 

@@ -12,6 +12,8 @@ export interface WingSpec {
   bays: number;
   /** Bays with steps instead of a balustrade. */
   openBays?: readonly number[];
+  /** Ground-floor bays left open at floor level where a neighbouring wing's corridor runs in (no balustrade, no steps). */
+  passBays?: readonly number[];
   /** Open hall arcaded on both long sides under exposed trusses (the clock wing). */
   twoFaced?: boolean;
 }
@@ -50,6 +52,7 @@ function arcadeFace(kit: Kit, s: WingSpec, z0: number, outward: 1 | -1): void {
   const top = PLINTH + s.storeys * s.storeyH;
   const holes: Hole[] = [];
   const isOpen = (i: number): boolean => (s.openBays ?? []).includes(i);
+  const isPass = (i: number): boolean => (s.passBays ?? []).includes(i);
   const zOut = outward < 0 ? z0 : z0 + FRONT_THICK;
   const proud = (from: number, to: number): [number, number] => (outward < 0 ? [zOut - to, zOut - from] : [zOut + from, zOut + to]);
   for (let k = 0; k < s.storeys; k++) {
@@ -60,8 +63,8 @@ function arcadeFace(kit: Kit, s: WingSpec, z0: number, outward: 1 | -1): void {
       holes.push(h);
       const [az0, az1] = proud(0, 0.05);
       kit.archivolt("trim", h, 0.13, az0, az1 - az0, m);
-      if (!(k === 0 && isOpen(i))) balustrade(kit, m, i * bay + 0.42, (i + 1) * bay - 0.42, f, z0 + 0.06);
-      if (k === 0) {
+      if (!(k === 0 && (isOpen(i) || isPass(i)))) balustrade(kit, m, i * bay + 0.42, (i + 1) * bay - 0.42, f, z0 + 0.06);
+      if (k === 0 && !isPass(i)) {
         if (isOpen(i)) steps(kit, m, h.cx, hw + 0.15, zOut, outward);
         else kit.block(i * bay, (i + 1) * bay, z0, z0 + FRONT_THICK, m);
       }
