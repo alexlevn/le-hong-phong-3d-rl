@@ -19,7 +19,7 @@ const PLACES: Readonly<Record<string, { label: string; place: Place }>> = {
 
 const LOOK_KEY = "lhp.look";
 const HELP_FREE = 'Kéo chuột để nhìn · W A S D để đi · Shift để đi nhanh · Bật "Bay" rồi dùng Q / E để lên xuống';
-const HELP_AVATAR = "Kéo chuột để xoay camera · Lăn chuột để gần / xa · W A S D để đi · Shift để chạy";
+const HELP_AVATAR = "Bấm xuống đất để chạy tới đó · Kéo chuột để xoay camera · Lăn chuột để gần / xa · W A S D để đi · Shift để chạy";
 
 function savedLook(): string | null {
   try {
@@ -40,6 +40,11 @@ async function start(): Promise<void> {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById("app")!.appendChild(renderer.domElement);
+  if (params.has("preview")) {
+    const { startPreview } = await import("./avatar/preview.ts");
+    startPreview(renderer, params);
+    return;
+  }
 
   const scene = new Scene();
   scene.fog = new Fog(new Color(0xc9d6e0), 150, 520);
@@ -76,7 +81,7 @@ async function start(): Promise<void> {
   scene.updateMatrixWorld(true);
 
   const walker = new Walker(camera, renderer.domElement, kit.blockers, kit.floors);
-  const player = new Player(camera, renderer.domElement, kit.blockers, kit.floors);
+  const player = new Player(camera, renderer.domElement, kit.blockers, kit.floors, scene);
   const avatarMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
   const avatars = new Map<LookId, Avatar>();
   const help = document.getElementById("help")!;

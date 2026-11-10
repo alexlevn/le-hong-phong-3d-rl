@@ -5,7 +5,7 @@ const EYE = 1.62;
 const RADIUS = 0.3;
 const WALK = 4.2;
 const FLY = 22;
-const BOUNDS = { x0: -130, x1: 102, z0: -180, z1: 180 };
+export const BOUNDS = { x0: -130, x1: 102, z0: -180, z1: 180 };
 
 export function groundAt(floors: readonly RaisedFloor[], x: number, z: number): number {
   let y = 0;
