@@ -7,6 +7,45 @@ const WALK = 4.2;
 const FLY = 22;
 const BOUNDS = { x0: -130, x1: 102, z0: -180, z1: 180 };
 
+export function groundAt(floors: readonly RaisedFloor[], x: number, z: number): number {
+  let y = 0;
+  for (const f of floors) if (x >= f.rect.x0 && x <= f.rect.x1 && z >= f.rect.z0 && z <= f.rect.z1 && f.y > y) y = f.y;
+  return y;
+}
+
+export function insideBlocker(blockers: readonly Rect[], x: number, z: number, margin: number): boolean {
+  for (const b of blockers) if (x > b.x0 - margin && x < b.x1 + margin && z > b.z0 - margin && z < b.z1 + margin) return true;
+  return false;
+}
+
+/** Pushes a circle out of every blocking rectangle so walking slides along walls. */
+export function pushOut(px: number, pz: number, blockers: readonly Rect[], radius: number): { x: number; z: number } {
+  let x = px;
+  let z = pz;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const b of blockers) {
+      const nx = MathUtils.clamp(x, b.x0, b.x1);
+      const nz = MathUtils.clamp(z, b.z0, b.z1);
+      const dx = x - nx;
+      const dz = z - nz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= radius * radius) continue;
+      if (d2 > 1e-8) {
+        const d = Math.sqrt(d2);
+        x = nx + (dx / d) * radius;
+        z = nz + (dz / d) * radius;
+      } else {
+        const min = Math.min(x - b.x0, b.x1 - x, z - b.z0, b.z1 - z);
+        if (min === x - b.x0) x = b.x0 - radius;
+        else if (min === b.x1 - x) x = b.x1 + radius;
+        else if (min === z - b.z0) z = b.z0 - radius;
+        else z = b.z1 + radius;
+      }
+    }
+  }
+  return { x: MathUtils.clamp(x, BOUNDS.x0, BOUNDS.x1), z: MathUtils.clamp(z, BOUNDS.z0, BOUNDS.z1) };
+}
+
 export interface Place { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number; fly: boolean }
 
 /** First-person walking on the ground and galleries (drag to look, WASD to move), with a free-flight mode for overviews. */
@@ -49,43 +88,6 @@ export class Walker {
     this.apply();
   }
 
-  private groundAt(x: number, z: number): number {
-    let y = 0;
-    for (const f of this.floors) if (x >= f.rect.x0 && x <= f.rect.x1 && z >= f.rect.z0 && z <= f.rect.z1 && f.y > y) y = f.y;
-    return y;
-  }
-
-  /** Pushes a circle out of every blocking rectangle so walking slides along walls. */
-  private resolve(): void {
-    for (let pass = 0; pass < 2; pass++) {
-      for (const b of this.blockers) {
-        const nx = MathUtils.clamp(this.x, b.x0, b.x1);
-        const nz = MathUtils.clamp(this.z, b.z0, b.z1);
-        const dx = this.x - nx;
-        const dz = this.z - nz;
-        const d2 = dx * dx + dz * dz;
-        if (d2 >= RADIUS * RADIUS) continue;
-        if (d2 > 1e-8) {
-          const d = Math.sqrt(d2);
-          this.x = nx + (dx / d) * RADIUS;
-          this.z = nz + (dz / d) * RADIUS;
-        } else {
-          const left = this.x - b.x0;
-          const right = b.x1 - this.x;
-          const top = this.z - b.z0;
-          const bottom = b.z1 - this.z;
-          const min = Math.min(left, right, top, bottom);
-          if (min === left) this.x = b.x0 - RADIUS;
-          else if (min === right) this.x = b.x1 + RADIUS;
-          else if (min === top) this.z = b.z0 - RADIUS;
-          else this.z = b.z1 + RADIUS;
-        }
-      }
-    }
-    this.x = MathUtils.clamp(this.x, BOUNDS.x0, BOUNDS.x1);
-    this.z = MathUtils.clamp(this.z, BOUNDS.z0, BOUNDS.z1);
-  }
-
   update(dt: number): void {
     const forward = (this.keys.has("KeyW") || this.keys.has("ArrowUp") ? 1 : 0) - (this.keys.has("KeyS") || this.keys.has("ArrowDown") ? 1 : 0);
     const strafe = (this.keys.has("KeyD") || this.keys.has("ArrowRight") ? 1 : 0) - (this.keys.has("KeyA") || this.keys.has("ArrowLeft") ? 1 : 0);
@@ -104,8 +106,10 @@ export class Walker {
     } else {
       this.x += -sin * fwd + cos * side;
       this.z += -cos * fwd - sin * side;
-      this.resolve();
-      const target = this.groundAt(this.x, this.z) + EYE;
+      const p = pushOut(this.x, this.z, this.blockers, RADIUS);
+      this.x = p.x;
+      this.z = p.z;
+      const target = groundAt(this.floors, this.x, this.z) + EYE;
       this.y = MathUtils.damp(this.y, target, 14, dt);
     }
     this.apply();

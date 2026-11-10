@@ -1,4 +1,7 @@
-import { ACESFilmicToneMapping, Color, DirectionalLight, EquirectangularReflectionMapping, Fog, HemisphereLight, PCFSoftShadowMap, PerspectiveCamera, PMREMGenerator, Scene, SRGBColorSpace, TextureLoader, Timer, WebGLRenderer } from "three";
+import { ACESFilmicToneMapping, Color, DirectionalLight, EquirectangularReflectionMapping, Fog, HemisphereLight, MeshStandardMaterial, PCFSoftShadowMap, PerspectiveCamera, PMREMGenerator, Scene, SRGBColorSpace, TextureLoader, Timer, WebGLRenderer } from "three";
+import { LOOKS, parseLook, type LookId } from "./avatar/looks.ts";
+import { Avatar } from "./avatar/model.ts";
+import { Player } from "./controls/player.ts";
 import { Walker, type Place } from "./controls/walker.ts";
 import { buildCampus } from "./world/campus.ts";
 import { createFoliageMaterial, createMaterials } from "./world/materials.ts";
@@ -13,6 +16,18 @@ const PLACES: Readonly<Record<string, { label: string; place: Place }>> = {
   aerial: { label: "Nhìn từ trên cao", place: { x: 92, y: 62, z: 72, lookX: 12, lookY: 0, lookZ: 0, fly: true } },
   top: { label: "Đối chiếu vệ tinh", place: { x: 15, y: 150, z: 0.1, lookX: 15, lookY: 0, lookZ: 0, fly: true } },
 };
+
+const LOOK_KEY = "lhp.look";
+const HELP_FREE = 'Kéo chuột để nhìn · W A S D để đi · Shift để đi nhanh · Bật "Bay" rồi dùng Q / E để lên xuống';
+const HELP_AVATAR = "Kéo chuột để xoay camera · Lăn chuột để gần / xa · W A S D để đi · Shift để chạy";
+
+function savedLook(): string | null {
+  try {
+    return localStorage.getItem(LOOK_KEY);
+  } catch {
+    return null;
+  }
+}
 
 async function start(): Promise<void> {
   const params = new URLSearchParams(location.search);
@@ -61,22 +76,93 @@ async function start(): Promise<void> {
   scene.updateMatrixWorld(true);
 
   const walker = new Walker(camera, renderer.domElement, kit.blockers, kit.floors);
+  const player = new Player(camera, renderer.domElement, kit.blockers, kit.floors);
+  const avatarMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
+  const avatars = new Map<LookId, Avatar>();
+  const help = document.getElementById("help")!;
+  const lookSelect = document.getElementById("look") as HTMLSelectElement;
+  const fly = document.getElementById("fly") as HTMLInputElement;
+
+  /** Character to take back after flying; cleared only when the user picks "none". */
+  let lastLook: LookId | null = null;
+
+  /** Hands control to the chosen character, or back to the eye-level walker when `id` is null. */
+  const setLook = (id: LookId | null): void => {
+    if (player.avatar) scene.remove(player.avatar.root);
+    if (id === null) {
+      if (player.active) {
+        const p = camera.position;
+        walker.goTo({ x: p.x, y: p.y, z: p.z, lookX: player.x, lookY: p.y - 1, lookZ: player.z, fly: false });
+      }
+      player.active = false;
+      player.avatar = null;
+    } else {
+      let avatar = avatars.get(id);
+      if (!avatar) {
+        avatar = new Avatar(id, avatarMaterial);
+        avatars.set(id, avatar);
+      }
+      if (!player.active) {
+        // Start where the eye-level camera stood, facing where it looked.
+        const p = camera.position;
+        const dir = camera.getWorldDirection(avatar.root.position.clone());
+        player.place(p.x, p.z, p.x + dir.x, p.z + dir.z);
+      }
+      player.avatar = avatar;
+      player.active = true;
+      lastLook = id;
+      walker.fly = false;
+      scene.add(avatar.root);
+    }
+    lookSelect.value = id ?? "";
+    help.textContent = player.active ? HELP_AVATAR : HELP_FREE;
+    try {
+      localStorage.setItem(LOOK_KEY, lastLook ?? "none");
+    } catch {
+      // Private mode: the choice just is not remembered.
+    }
+  };
+
+  for (const [id, look] of Object.entries(LOOKS)) lookSelect.add(new Option(look.label, id));
+  lookSelect.addEventListener("change", () => {
+    if (lookSelect.value === "") lastLook = null;
+    setLook(lookSelect.value === "" ? null : parseLook(lookSelect.value));
+    lookSelect.blur();
+  });
+
   const startPlace = PLACES[params.get("view") ?? "gate"] ?? PLACES.gate!;
   walker.goTo(startPlace.place);
+  const wanted = params.get("nv") ?? savedLook();
+  if (wanted !== "none") lastLook = parseLook(wanted);
+  setLook(startPlace.place.fly ? null : lastLook);
 
   const bar = document.getElementById("places")!;
   for (const entry of Object.values(PLACES)) {
     const b = document.createElement("button");
     b.textContent = entry.label;
     b.addEventListener("click", () => {
-      walker.goTo(entry.place);
+      if (lastLook !== null && !entry.place.fly) {
+        const p = entry.place;
+        if (!player.active) {
+          walker.goTo(p);
+          setLook(lastLook);
+        }
+        player.place(p.x, p.z, p.lookX, p.lookZ);
+      } else {
+        if (player.active) setLook(null);
+        walker.goTo(entry.place);
+      }
       renderer.domElement.focus();
     });
     bar.appendChild(b);
   }
-  const fly = document.getElementById("fly") as HTMLInputElement;
   fly.checked = walker.fly;
-  fly.addEventListener("change", () => (walker.fly = fly.checked));
+  fly.addEventListener("change", () => {
+    if (fly.checked && player.active) setLook(null);
+    walker.fly = fly.checked;
+    // Landing takes the last character back, right under where the camera was flying.
+    if (!fly.checked && lastLook !== null) setLook(lastLook);
+  });
   if (params.has("shot")) for (const id of ["hud", "help"]) document.getElementById(id)!.style.display = "none";
 
   window.addEventListener("resize", () => {
@@ -91,7 +177,9 @@ async function start(): Promise<void> {
   const timer = new Timer();
   renderer.setAnimationLoop((t) => {
     timer.update(t);
-    walker.update(Math.min(timer.getDelta(), 0.05));
+    const dt = Math.min(timer.getDelta(), 0.05);
+    if (player.active) player.update(dt);
+    else walker.update(dt);
     if (fly.checked !== walker.fly) fly.checked = walker.fly;
     renderer.render(scene, camera);
   });
